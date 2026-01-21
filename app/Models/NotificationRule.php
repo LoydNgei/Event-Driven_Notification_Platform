@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Enums\NotificationChannel;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Arr;
@@ -33,6 +34,7 @@ class NotificationRule extends Model
         return [
             'conditions' => 'array',
             'is_active' => 'boolean',
+            'channel' => NotificationChannel::class,
         ];
     }
 
@@ -103,9 +105,9 @@ class NotificationRule extends Model
 
         // Fall back to static recipient based on channel
         return match ($this->channel) {
-            'email' => $this->recipient_email,
-            'sms' => $this->recipient_phone,
-            'slack' => $this->recipient_slack_webhook,
+            NotificationChannel::Email => $this->recipient_email,
+            NotificationChannel::Sms => $this->recipient_phone,
+            NotificationChannel::Slack => $this->recipient_slack_webhook,
             default => null,
         };
     }

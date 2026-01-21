@@ -1,23 +1,12 @@
 <?php
 
 namespace App\Models;
-
+use App\Enums\NotificationStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class NotificationLog extends Model
 {
-    /**
-     * Status constants.
-     */
-    public const STATUS_PENDING = 'pending';
-    public const STATUS_PROCESSING = 'processing';
-    public const STATUS_SENT = 'sent';
-    public const STATUS_FAILED = 'failed';
-
-    /**
-     * The attributes that are mass assignable.
-     */
     protected $fillable = [
         'event_source_id',
         'notification_rule_id',
@@ -30,20 +19,23 @@ class NotificationLog extends Model
         'sent_at',
     ];
 
-    /**
-     * The attributes that should be cast.
-     */
+    protected $attributes = [
+        'attempts' => 0,
+        'status' => NotificationStatus::Pending->value,
+    ];
+
     protected function casts(): array
     {
         return [
             'payload' => 'array',
             'attempts' => 'integer',
             'sent_at' => 'datetime',
+            'status' => NotificationStatus::class,
         ];
     }
 
     /**
-     * Get the event source this log belongs to.
+     * Event source this log belongs to.
      */
     public function eventSource(): BelongsTo
     {
@@ -51,7 +43,7 @@ class NotificationLog extends Model
     }
 
     /**
-     * Get the notification rule this log belongs to.
+     * Notification rule this log belongs to.
      */
     public function notificationRule(): BelongsTo
     {
@@ -63,10 +55,8 @@ class NotificationLog extends Model
      */
     public function markAsProcessing(): void
     {
-        $this->update([
-            'status' => self::STATUS_PROCESSING,
-            'attempts' => $this->attempts + 1,
-        ]);
+        $this->increment('attempts');
+        $this->forceFill(['status' => NotificationStatus::Processing])->save();
     }
 
     /**
@@ -74,11 +64,11 @@ class NotificationLog extends Model
      */
     public function markAsSent(): void
     {
-        $this->update([
-            'status' => self::STATUS_SENT,
+        $this->forceFill([
+            'status' => NotificationStatus::Sent,
             'sent_at' => now(),
             'error_message' => null,
-        ]);
+        ])->save();
     }
 
     /**
@@ -86,10 +76,10 @@ class NotificationLog extends Model
      */
     public function markAsFailed(string $errorMessage): void
     {
-        $this->update([
-            'status' => self::STATUS_FAILED,
+        $this->forceFill([
+            'status' => NotificationStatus::Failed,
             'error_message' => $errorMessage,
-        ]);
+        ])->save();
     }
 
     /**
@@ -97,9 +87,7 @@ class NotificationLog extends Model
      */
     public function resetToPending(): void
     {
-        $this->update([
-            'status' => self::STATUS_PENDING,
-        ]);
+        $this->forceFill(['status' => NotificationStatus::Pending])->save();
     }
 
     /**
@@ -107,7 +95,7 @@ class NotificationLog extends Model
      */
     public function scopePending($query)
     {
-        return $query->where('status', self::STATUS_PENDING);
+        return $query->where('status', NotificationStatus::Pending);
     }
 
     /**
@@ -115,7 +103,7 @@ class NotificationLog extends Model
      */
     public function scopeFailed($query)
     {
-        return $query->where('status', self::STATUS_FAILED);
+        return $query->where('status', NotificationStatus::Failed);
     }
 
     /**
@@ -123,7 +111,7 @@ class NotificationLog extends Model
      */
     public function canRetry(int $maxAttempts = 3): bool
     {
-        return $this->attempts < $maxAttempts 
-            && $this->status === self::STATUS_FAILED;
+        return $this->status === NotificationStatus::Failed
+            && ($this->attempts ?? 0) < $maxAttempts;
     }
 }
